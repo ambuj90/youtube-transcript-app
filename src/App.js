@@ -7,9 +7,17 @@ import { Button, TextField, Select, MenuItem, Typography, Box, Paper, Switch, Fo
 // Dynamically set backend URL for both local & live
 const BASE_URL = "http://localhost:5000";
 
-// Function to Start and Stop Speech
-const speakText = (text) => {
+// Function to Play Transcript Using SpeechSynthesis API
+const playTranscript = (text) => {
+  if (!text || text.length === 0) {
+    console.error("No transcript available to play.");
+    return;
+  }
+
   const speech = new SpeechSynthesisUtterance(text);
+  speech.lang = "en-US";  // Set language
+  speech.rate = 1;        // Normal speed
+  speech.pitch = 1;       // Normal pitch
   window.speechSynthesis.speak(speech);
 };
 
@@ -26,6 +34,7 @@ function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [history, setHistory] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [buttonText, setButtonText] = useState("Get Transcript"); // ✅ State for button text
 
   // Load history from localStorage
   useEffect(() => {
@@ -35,37 +44,49 @@ function App() {
 
   // Fetch transcript from backend
   const fetchTranscript = async () => {
-    console.log("videoId")
+    console.log("Fetching Transcript...");
     setError("");
     setTranscript([]);
+    setButtonText("Loading..."); // ✅ Set button text while loading
 
     if (!videoId) {
       setError("Please enter a YouTube Video ID.");
+      setButtonText("Get Transcript"); // Reset on error
       return;
     }
-    console.log(videoId)
+    console.log("Video ID:", videoId);
 
     try {
       const response = await axios.get(`/transcript?videoUrl=${videoId}`);
-      setTranscript(response.data.transcript);
+      const transcriptData = response.data.transcript;
+
+      setTranscript(transcriptData);
+
+      // ✅ Update button text with first few words of transcript
+      if (Array.isArray(transcriptData) && transcriptData.length > 0) {
+        setButtonText(`"${transcriptData[0].slice(0, 20)}..."`);
+      } else {
+        setButtonText("Transcript Ready");
+      }
 
       // Save to history
-      const newEntry = { videoId, transcript: response.data.transcript };
+      const newEntry = { videoId, transcript: transcriptData };
       const updatedHistory = [newEntry, ...history].slice(0, 5); // Keep last 5
       setHistory(updatedHistory);
       localStorage.setItem("transcriptHistory", JSON.stringify(updatedHistory));
     } catch (err) {
       setError("Failed to fetch transcript. Please check the video ID and try again.");
+      setButtonText("Get Transcript"); // Reset button text on failure
     }
   };
 
   // Download transcript as TXT
   const downloadTXT = () => {
-    if (transcript.length === 0) {
+    if (!transcript || transcript.length === 0) {
       setError("No transcript available to download.");
       return;
     }
-    console.log(transcript);
+    console.log("Transcript Data:", transcript);
 
     const textContent = Array.isArray(transcript)
       ? transcript.join(" ")  // Join transcript if it's an array
@@ -119,7 +140,7 @@ function App() {
       <Paper sx={{ padding: "20px", maxWidth: "600px", margin: "auto", textAlign: "center" }}>
         <Typography variant="h4">YouTube Transcript Fetcher</Typography>
 
-        <TextField label="YouTube Video ID" variant="outlined" fullWidth margin="normal" value={videoId} onChange={(e) => setVideoId(e.target.value)} />
+        <TextField label="YouTube Video Url" variant="outlined" fullWidth margin="normal" value={videoId} onChange={(e) => setVideoId(e.target.value)} />
 
         <FormControl fullWidth margin="normal">
           <InputLabel>Select Language</InputLabel>
@@ -133,9 +154,11 @@ function App() {
           </Select>
         </FormControl>
 
+        {/* ✅ Dynamic Button */}
         <Button variant="contained" color="primary" onClick={fetchTranscript} sx={{ margin: "10px" }}>
-          Get Transcript
+          {buttonText}
         </Button>
+
         <Button variant="contained" color="secondary" onClick={downloadTXT} sx={{ margin: "10px" }}>
           Download TXT
         </Button>
@@ -150,37 +173,14 @@ function App() {
 
         {error && <Typography color="error">{error}</Typography>}
 
-        {/* Search Box */}
-        <TextField
-          label="Search Transcript"
-          variant="outlined"
-          fullWidth
-          margin="normal"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-
-        <Box sx={{
-          maxHeight: "300px",
-          overflowY: "auto",
-          textAlign: "left",
-          padding: "10px",
-          backgroundColor: darkMode ? "#333" : "#fff",
-          color: darkMode ? "#fff" : "#000",  /* Text color changes dynamically */
-          borderRadius: "5px"
-        }}>
-          {/* {transcript
-            .filter((line) => line.text.toLowerCase().includes(searchTerm.toLowerCase()))
-            .map((line, index) => (
-              <Typography key={index} sx={{ color: darkMode ? "#ffffff" : "#000000" }}>
-                {line.text}
-              </Typography>
-            ))} */}
-        </Box>
-
-        {/* <Button variant="contained" color="info" onClick={() => speakText(transcript.map((line) => line.text).join(" "))} sx={{ margin: "10px" }}>
+        {/* Play & Stop Transcript Buttons */}
+        <Button
+          variant="contained"
+          color="info"
+          onClick={() => playTranscript(Array.isArray(transcript) ? transcript.join(" ") : transcript.toString())}
+          sx={{ margin: "10px" }}>
           Play Transcript
-        </Button> */}
+        </Button>
 
         <Button variant="contained" color="error" onClick={stopTextToSpeech} sx={{ margin: "10px" }}>
           Stop Transcript
